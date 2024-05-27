@@ -1,4 +1,4 @@
-(* 无人机非对称加密 *)
+(* drone asymmetric encryption *)
 type uskey.
 type upkey.
 
@@ -7,7 +7,7 @@ fun uenc(bitstring, upkey) : bitstring.
 
 reduc forall m : bitstring, sk : uskey; udec(uenc(m, upk(sk)), sk) = m.
 
-(* 地面站非对称加密 *)
+(* Ground station asymmetric encryption *)
 type gskey.
 type gpkey.
 
@@ -17,21 +17,20 @@ fun Sign(bitstring, gskey) : bitstring.
 
 reduc forall m : bitstring, sk : gskey; gdec(genc(m, gpk(sk)), sk) = m.
 
-(* 其他函数和重构函数 *)
+(* Other functions and refactoring functions *)
 fun ConcatThree(upkey, bitstring, bitstring) : bitstring [private].
-
 
 reduc forall m1 : upkey, m2 : bitstring, m3 : bitstring; Separate1(ConcatThree(m1, m2, m3)) = m1.
 reduc forall m1 : upkey, m2 : bitstring, m3 : bitstring; Separate2(ConcatThree(m1, m2, m3)) = m2.
 reduc forall m1 : upkey, m2 : bitstring, m3 : bitstring; Separate3(ConcatThree(m1, m2, m3)) = m3.
 
-(* 信道 *)
+(* channel *)
 free c : channel.
 
-(* 私有参数 *)
+(* private parameter *)
 free IDi : bitstring [private].
 
-(* 判断是否被攻击者截获 *)
+(* Determine whether it has been intercepted by an attacker *)
 query attacker(IDi).
 query attacker(new usk).
 query attacker(new gsk).
@@ -40,20 +39,19 @@ noninterf IDi.
 weaksecret IDi.
 
 
-(* 事件 *)
+(* Event *)
 event UAV_recieve_gpk_from_GS(gpkey).
 event UAV_send_msg1(upkey, bitstring, bitstring, gpkey).
 event GS_recieve_msg1(upkey, bitstring, bitstring, gpkey).
 event GS_send_Cert(upkey, bitstring).
 event UAV_receive_Cert(bitstring).
 
-(* 添加认证查询 *)
-
-(* 确保无人机在发送消息1之前已经接收到地面站的公钥 *)
+(* Add an authentication query *)
+(* Ensure that the drone has received the public key from the ground station before sending message 1 *)
 query uav_upk: upkey, idi: bitstring, ti: bitstring, gpkX: gpkey;
       event(UAV_send_msg1(uav_upk, idi, ti, gpkX)) ==> event(UAV_recieve_gpk_from_GS(gpkX)).
 
-(* 确保地面站在发送证书之前已经接收到无人机发送的消息1 *)
+(* Ensure that the ground station has received the message from the drone before sending the certificate1 *)
 query gs_upk: upkey, idi: bitstring, ti: bitstring, gpk: gpkey, cert: bitstring;
       event(GS_send_Cert(gs_upk, cert)) ==> event(GS_recieve_msg1(gs_upk, idi, ti, gpk)).
 
