@@ -1,0 +1,179 @@
+
+(* 无人机Di的非对称加密 *)
+type uskey.
+type upkey.
+
+fun upk(uskey) : upkey [private].
+fun uenc(bitstring, upkey) : bitstring.
+
+reduc forall m : bitstring, sk : uskey; udec(uenc(m, upk(sk)), sk) = m.
+
+(* 地面站GSB的非对称加密 *)
+type gskey.
+type gpkey.
+
+fun gpk(gskey) : gpkey [private].
+fun genc(bitstring, gpkey) : bitstring.
+
+reduc forall m : bitstring, sk : gskey; gdec(genc(m, gpk(sk)), sk) = m.
+
+(* 无人机Dj的非对称加密 *)
+type tskey.
+type tpkey.
+
+fun tpk(tskey) : tpkey [private].
+fun tenc(bitstring, tpkey) : bitstring.
+
+reduc forall m : bitstring, sk : tskey; tdec(tenc(m, tpk(sk)), sk) = m.
+
+(* 其他函数和重构函数 *)
+fun hash(bitstring) : bitstring.
+
+fun sign(bitstring, uskey) : bitstring.
+
+fun ConcatTwo(upkey, bitstring) : bitstring [private].
+(* 归约规则 *)
+reduc forall m1 : upkey, m2 : bitstring; Separate11(ConcatTwo(m1, m2)) = m1.
+reduc forall m1 : upkey, m2 : bitstring; Separate12(ConcatTwo(m1, m2)) = m2.
+
+
+fun ConcatThree(bitstring, bitstring, bitstring) : bitstring [private].
+(* 归约规则 *)
+reduc forall m1 : bitstring, m2 : bitstring, m3 : bitstring; Separate21(ConcatThree(m1, m2, m3)) = m1.
+reduc forall m1 : bitstring, m2 : bitstring, m3 : bitstring; Separate22(ConcatThree(m1, m2, m3)) = m2.
+reduc forall m1 : bitstring, m2 : bitstring, m3 : bitstring; Separate23(ConcatThree(m1, m2, m3)) = m3.
+
+(* 信道 *)
+free c : channel.
+
+(* 私有参数 *)
+free Certi : bitstring [private].
+free Certj : bitstring [private].
+
+(* 判断是否被攻击者截获 *)
+query attacker(Certi).
+query attacker(Certj).
+query attacker(new usk).
+query attacker(new gsk).
+query attacker(new tsk).
+
+(* 事件 *)
+event UAVi_send_CD_request_to_UAVj(bitstring).
+event UAVj_forwarding_to_GS(bitstring).
+event GS_receive_request(bitstring).
+
+event GS_send_response(bitstring).
+event UAVi_receive_response(bitstring).
+
+event UAVi_send_cert_to_GS(bitstring).
+event GS_receive_cert_from_UAVi(bitstring).
+
+event GS_send_final_response_to_UAVi(bitstring).
+event UAVi_receive_final_response(bitstring).
+
+event GS_send_final_response_to_UAVj(bitstring).
+event UAVj_receive_final_response(bitstring).
+
+(*
+(* 添加认证查询 *)
+(* 确保GS在发送响应之前已经接收到UAVi的请求 *)
+query uav_request : bitstring;
+    inj-event(UAVj_forwarding_to_GS(uav_request)) ==> inj-event(UAVi_send_CD_request_to_UAVj(uav_request)).
+
+query uav_request : bitstring;
+    inj-event(GS_receive_request(uav_request)) ==> inj-event(UAVj_forwarding_to_GS(uav_request)).
+
+query gs_request: bitstring;
+      event(GS_send_response(gs_request)) ==> event(GS_receive_request(gs_request)).
+
+(* 确保UAVi在发送证书之前已经接收到GS的响应 *)
+query uavi_response: bitstring;
+      event(UAVi_send_cert_to_GS(uavi_response)) ==> event(UAVi_receive_response(uavi_response)).
+
+(* 确保GS在发送最终响应给UAVi之前已经接收到UAVi的证书 *)
+query gs_cert: bitstring;
+      event(GS_send_final_response_to_UAVi(gs_cert)) ==> event(GS_receive_cert_from_UAVi(gs_cert)).
+
+(* 确保GS在发送最终响应给UAVj之前已经接收到UAVi的证书 *)
+query gs_cert_to_uavj: bitstring;
+      event(GS_send_final_response_to_UAVj(gs_cert_to_uavj)) ==> event(GS_receive_cert_from_UAVi(gs_cert_to_uavj)).
+
+*)
+
+(* UAVi Process *)
+let UAVi(upk: upkey, usk: uskey, gpk: gpkey) =
+    let h1 = hash(Certi) in
+    let temp1 = ConcatTwo(upk, h1) in
+    out (c, temp1);
+    event UAVi_send_CD_request_to_UAVj(temp1);
+
+    in (c, R : bitstring);
+    event UAVi_receive_response(R);
+
+    let sign1 = sign(R, usk) in
+    let h2 = hash(Certi) in
+    let temp2 = ConcatThree(Certi, h2, sign1) in
+    let msg1 = genc(temp2, gpk) in
+    out (c, msg1);
+    event UAVi_send_cert_to_GS(msg1);
+
+    in (c, msg2 : bitstring);
+    let Certj' = udec(msg2, usk) in
+    event UAVi_receive_final_response(msg2).
+
+
+(* Ground Station Process *)
+let GS(gpk: gpkey, gsk: gskey, upk: upkey, tpk: tpkey) =
+    in (c ,temp1 : bitstring);
+    event GS_receive_request(temp1);
+
+    let upk' = Separate11(temp1) in
+    let h1' = Separate12(temp1) in
+
+    let h11' = hash(Certi) in
+    if h1' = h11' then
+    new R : bitstring;
+    out (c, R);
+    event GS_send_response(R);
+
+    in (c, temp2 : bitstring);
+    event GS_receive_cert_from_UAVi(temp2);
+
+    let temp2' = gdec(temp2, gsk) in
+    let Certi' =  Separate21(temp2') in
+    let h2' = Separate22(temp2') in
+    let sign1' = Separate23(temp2') in
+
+    let h22' = hash(Certi') in
+    if h2' = h22' then
+    let msg2 = uenc(Certj, upk) in
+    out (c, msg2);
+    event GS_send_final_response_to_UAVi(msg2);
+
+    let msg3 = tenc(Certi, tpk) in
+    out (c, msg3);
+    event GS_send_final_response_to_UAVj(msg3).
+
+
+(* UAVj Process *)
+let UAVj(tpk: tpkey, tsk: tskey, gpk: gpkey) =
+    in (c, temp1 : bitstring);
+    out (c, temp1);
+    event UAVj_forwarding_to_GS(temp1);
+
+    in (c ,msg3 : bitstring);
+    let Certi' = tdec(msg3, tsk) in
+    event UAVj_receive_final_response(msg3).
+
+
+(* Process *)
+process
+    new usk : uskey;
+    new gsk : gskey;
+    new tsk : tskey;
+
+    let upk = upk(usk) in out(c, upk);
+    let gpk = gpk(gsk) in out(c, gpk);
+    let tpk = tpk(tsk) in out(c, tpk);
+
+    ((!GS(gpk, gsk, upk, tpk)) | (!UAVi(upk, usk, gpk)) | (!UAVj(tpk, tsk, gpk)))
